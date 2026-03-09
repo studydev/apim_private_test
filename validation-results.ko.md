@@ -37,7 +37,7 @@ flowchart LR
   APIM -->|"Managed Identity 인증"| AOAI["Azure OpenAI\n<aoai-resource-name>\ndeployment: gpt-5.2"]
 ```
 
-![Resource Group](../images/resource_group.png)
+![Resource Group](images/resource_group.png)
 
 
 ## 3. 검증 시나리오와 결과
