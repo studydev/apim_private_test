@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": {
+      "value": "koreacentral"
+    },
+    "apimName": {
+      "value": "apim-private-test-xxxx"
+    },
+    "apimPublisherEmail": {
+      "value": "your-email@example.com"
+    },
+    "apimPublisherName": {
+      "value": "your-org"
+    },
+    "vmAdminUsername": {
+      "value": "azureuser"
+    },
+    "vmAdminPassword": {
+      "value": "<replace-with-strong-password>"
+    },
+    "allowedSshSourceIp": {
+      "value": "203.0.113.10/32"
+    },
+    "backend1Url": {
+      "value": "https://your-aoai-endpoint.openai.azure.com"
+    },
+    "backend2Url": {
+      "value": "https://your-aoai-endpoint.openai.azure.com"
+    }
+  }
+}

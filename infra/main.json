@@ -1,0 +1,1071 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.41.2.15936",
+      "templateHash": "14249610818209934522"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all new resources."
+      }
+    },
+    "apimName": {
+      "type": "string",
+      "metadata": {
+        "description": "APIM instance name. Must be globally unique."
+      }
+    },
+    "apimPublisherEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "APIM publisher email."
+      }
+    },
+    "apimPublisherName": {
+      "type": "string",
+      "metadata": {
+        "description": "APIM publisher name."
+      }
+    },
+    "vmAdminUsername": {
+      "type": "string",
+      "defaultValue": "azureuser",
+      "metadata": {
+        "description": "VM admin username."
+      }
+    },
+    "vmAdminPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "VM admin password."
+      }
+    },
+    "allowedSshSourceIp": {
+      "type": "string",
+      "metadata": {
+        "description": "Public source CIDR allowed for SSH to test VM. Example: 203.0.113.10/32"
+      }
+    },
+    "backend1Url": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure OpenAI endpoint URL in Korea Central. Example: https://xxx.openai.azure.com"
+      }
+    },
+    "backend2Url": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure OpenAI endpoint URL in Japan East. Example: https://yyy.openai.azure.com"
+      }
+    }
+  },
+  "variables": {
+    "vnetName": "vnet-apim-private-test",
+    "vmSubnetName": "snet-vm",
+    "peSubnetName": "snet-pe",
+    "nsgName": "nsg-vm",
+    "vmName": "vm-apim-test"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "network",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vnetName": {
+            "value": "[variables('vnetName')]"
+          },
+          "vmSubnetName": {
+            "value": "[variables('vmSubnetName')]"
+          },
+          "peSubnetName": {
+            "value": "[variables('peSubnetName')]"
+          },
+          "nsgName": {
+            "value": "[variables('nsgName')]"
+          },
+          "allowedSshSourceIp": {
+            "value": "[parameters('allowedSshSourceIp')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "16691228517110041130"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "vnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "Virtual network name."
+              }
+            },
+            "vmSubnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "VM subnet name."
+              }
+            },
+            "peSubnetName": {
+              "type": "string",
+              "metadata": {
+                "description": "Private endpoint subnet name."
+              }
+            },
+            "nsgName": {
+              "type": "string",
+              "metadata": {
+                "description": "Network security group name for VM subnet."
+              }
+            },
+            "allowedSshSourceIp": {
+              "type": "string",
+              "metadata": {
+                "description": "Public source CIDR allowed for SSH to VM."
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2024-01-01",
+              "name": "[parameters('nsgName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "securityRules": [
+                  {
+                    "name": "Allow-Ssh-From-Admin-Ip",
+                    "properties": {
+                      "priority": 100,
+                      "protocol": "Tcp",
+                      "access": "Allow",
+                      "direction": "Inbound",
+                      "sourceAddressPrefix": "[parameters('allowedSshSourceIp')]",
+                      "sourcePortRange": "*",
+                      "destinationAddressPrefix": "*",
+                      "destinationPortRange": "22"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/virtualNetworks",
+              "apiVersion": "2024-01-01",
+              "name": "[parameters('vnetName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "addressSpace": {
+                  "addressPrefixes": [
+                    "10.0.0.0/16"
+                  ]
+                },
+                "subnets": [
+                  {
+                    "name": "[parameters('vmSubnetName')]",
+                    "properties": {
+                      "addressPrefix": "10.0.1.0/24",
+                      "networkSecurityGroup": {
+                        "id": "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+                      }
+                    }
+                  },
+                  {
+                    "name": "[parameters('peSubnetName')]",
+                    "properties": {
+                      "addressPrefix": "10.0.2.0/24",
+                      "privateEndpointNetworkPolicies": "Disabled"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkSecurityGroups', parameters('nsgName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "vnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName'))]"
+            },
+            "vmSubnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('vmSubnetName'))]"
+            },
+            "peSubnetId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('peSubnetName'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "vm",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "vmName": {
+            "value": "[variables('vmName')]"
+          },
+          "vmSubnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.vmSubnetId.value]"
+          },
+          "vmAdminUsername": {
+            "value": "[parameters('vmAdminUsername')]"
+          },
+          "vmAdminPassword": {
+            "value": "[parameters('vmAdminPassword')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "6577553948741526564"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "vmName": {
+              "type": "string",
+              "metadata": {
+                "description": "Virtual machine name."
+              }
+            },
+            "vmSubnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Target subnet resource ID for VM NIC."
+              }
+            },
+            "vmAdminUsername": {
+              "type": "string",
+              "metadata": {
+                "description": "VM admin username."
+              }
+            },
+            "vmAdminPassword": {
+              "type": "securestring",
+              "metadata": {
+                "description": "VM admin password."
+              }
+            }
+          },
+          "variables": {
+            "nicName": "[format('nic-{0}', parameters('vmName'))]",
+            "pipName": "[format('pip-{0}', parameters('vmName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/publicIPAddresses",
+              "apiVersion": "2024-01-01",
+              "name": "[variables('pipName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard"
+              },
+              "properties": {
+                "publicIPAllocationMethod": "Static"
+              }
+            },
+            {
+              "type": "Microsoft.Network/networkInterfaces",
+              "apiVersion": "2024-01-01",
+              "name": "[variables('nicName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "ipConfigurations": [
+                  {
+                    "name": "ipconfig1",
+                    "properties": {
+                      "subnet": {
+                        "id": "[parameters('vmSubnetId')]"
+                      },
+                      "privateIPAllocationMethod": "Dynamic",
+                      "publicIPAddress": {
+                        "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+                      }
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/publicIPAddresses', variables('pipName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Compute/virtualMachines",
+              "apiVersion": "2024-03-01",
+              "name": "[parameters('vmName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "hardwareProfile": {
+                  "vmSize": "Standard_B2s"
+                },
+                "osProfile": {
+                  "computerName": "[parameters('vmName')]",
+                  "adminUsername": "[parameters('vmAdminUsername')]",
+                  "adminPassword": "[parameters('vmAdminPassword')]",
+                  "customData": "[base64('#cloud-config\npackage_update: true\npackages:\n  - dnsutils\n  - curl\n  - jq\n')]",
+                  "linuxConfiguration": {
+                    "disablePasswordAuthentication": false
+                  }
+                },
+                "storageProfile": {
+                  "imageReference": {
+                    "publisher": "Canonical",
+                    "offer": "0001-com-ubuntu-server-jammy",
+                    "sku": "22_04-lts-gen2",
+                    "version": "latest"
+                  },
+                  "osDisk": {
+                    "createOption": "FromImage",
+                    "managedDisk": {
+                      "storageAccountType": "Standard_LRS"
+                    }
+                  }
+                },
+                "networkProfile": {
+                  "networkInterfaces": [
+                    {
+                      "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/networkInterfaces', variables('nicName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "vmPublicIp": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', variables('pipName')), '2024-01-01').ipAddress]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'network')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-enabled",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "apimName": {
+            "value": "[parameters('apimName')]"
+          },
+          "apimPublisherEmail": {
+            "value": "[parameters('apimPublisherEmail')]"
+          },
+          "apimPublisherName": {
+            "value": "[parameters('apimPublisherName')]"
+          },
+          "publicNetworkAccess": {
+            "value": "Enabled"
+          },
+          "deployApi": {
+            "value": true
+          },
+          "backend1Url": {
+            "value": "[parameters('backend1Url')]"
+          },
+          "backend2Url": {
+            "value": "[parameters('backend2Url')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "6860399907950564650"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM instance name."
+              }
+            },
+            "apimPublisherEmail": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM publisher email."
+              }
+            },
+            "apimPublisherName": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM publisher name."
+              }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "allowedValues": [
+                "Enabled",
+                "Disabled"
+              ],
+              "metadata": {
+                "description": "Public network access mode for APIM."
+              }
+            },
+            "deployApi": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "When true, deploy API/operations/policies. When false, update APIM only."
+              }
+            },
+            "backend1Url": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI endpoint URL in Korea Central."
+              }
+            },
+            "backend2Url": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI endpoint URL in Japan East."
+              }
+            }
+          },
+          "variables": {
+            "apiName": "chat-api",
+            "policyTemplateStart": "<policies><inbound><base /><set-backend-service base-url=\"",
+            "policyTemplateMiddle": "\" /><authentication-managed-identity resource=\"https://cognitiveservices.azure.com/\" /><set-method>POST</set-method></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>",
+            "backend1FullUrl": "[format('{0}/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-10-21', parameters('backend1Url'))]",
+            "backend2FullUrl": "[format('{0}/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-10-21', parameters('backend2Url'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[parameters('apimName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "StandardV2",
+                "capacity": 1
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "publisherEmail": "[parameters('apimPublisherEmail')]",
+                "publisherName": "[parameters('apimPublisherName')]",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]"
+              }
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "displayName": "Private Validation Chat API",
+                "path": "chat",
+                "protocols": [
+                  "https"
+                ],
+                "subscriptionRequired": false,
+                "serviceUrl": "https://example.invalid"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test1-post', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "displayName": "Proxy to Korea Central gpt-4o-mini",
+                "method": "POST",
+                "urlTemplate": "/test1",
+                "request": {
+                  "queryParameters": [],
+                  "headers": [],
+                  "representations": [
+                    {
+                      "contentType": "application/json"
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200
+                  },
+                  {
+                    "statusCode": 403
+                  },
+                  {
+                    "statusCode": 500
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test2-post', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "displayName": "Proxy to Japan East gpt-4o-mini",
+                "method": "POST",
+                "urlTemplate": "/test2",
+                "request": {
+                  "queryParameters": [],
+                  "headers": [],
+                  "representations": [
+                    {
+                      "contentType": "application/json"
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200
+                  },
+                  {
+                    "statusCode": 403
+                  },
+                  {
+                    "statusCode": 500
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test1-post/policy', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "format": "rawxml",
+                "value": "[format('{0}{1}{2}', variables('policyTemplateStart'), variables('backend1FullUrl'), variables('policyTemplateMiddle'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test2-post/policy', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "format": "rawxml",
+                "value": "[format('{0}{1}{2}', variables('policyTemplateStart'), variables('backend2FullUrl'), variables('policyTemplateMiddle'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "apimId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+            },
+            "apimPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '2023-09-01-preview', 'full').identity.principalId]"
+            },
+            "apimGatewayUrl": {
+              "type": "string",
+              "value": "[format('https://{0}.azure-api.net', parameters('apimName'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-private-endpoint",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "apimName": {
+            "value": "[parameters('apimName')]"
+          },
+          "peSubnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.peSubnetId.value]"
+          },
+          "vnetId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'network'), '2025-04-01').outputs.vnetId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "9348131941539393135"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM instance name."
+              }
+            },
+            "peSubnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Private endpoint subnet resource ID."
+              }
+            },
+            "vnetId": {
+              "type": "string",
+              "metadata": {
+                "description": "Virtual network resource ID linked to private DNS zone."
+              }
+            }
+          },
+          "variables": {
+            "peName": "[format('pe-{0}', parameters('apimName'))]",
+            "dnsZoneName": "privatelink.azure-api.net"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Network/privateEndpoints",
+              "apiVersion": "2024-01-01",
+              "name": "[variables('peName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "subnet": {
+                  "id": "[parameters('peSubnetId')]"
+                },
+                "privateLinkServiceConnections": [
+                  {
+                    "name": "apim-gateway-connection",
+                    "properties": {
+                      "privateLinkServiceId": "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]",
+                      "groupIds": [
+                        "gateway"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones",
+              "apiVersion": "2024-01-01",
+              "name": "[variables('dnsZoneName')]",
+              "location": "global"
+            },
+            {
+              "type": "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/link-{1}', variables('dnsZoneName'), parameters('apimName'))]",
+              "location": "global",
+              "properties": {
+                "registrationEnabled": false,
+                "virtualNetwork": {
+                  "id": "[parameters('vnetId')]"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsZoneName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+              "apiVersion": "2024-01-01",
+              "name": "[format('{0}/default', variables('peName'))]",
+              "properties": {
+                "privateDnsZoneConfigs": [
+                  {
+                    "name": "apim-dns-config",
+                    "properties": {
+                      "privateDnsZoneId": "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsZoneName'))]"
+                    }
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Network/privateDnsZones', variables('dnsZoneName'))]",
+                "[resourceId('Microsoft.Network/privateEndpoints', variables('peName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "privateEndpointId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Network/privateEndpoints', variables('peName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim-enabled')]",
+        "[resourceId('Microsoft.Resources/deployments', 'network')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "apim-disabled",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "apimName": {
+            "value": "[parameters('apimName')]"
+          },
+          "apimPublisherEmail": {
+            "value": "[parameters('apimPublisherEmail')]"
+          },
+          "apimPublisherName": {
+            "value": "[parameters('apimPublisherName')]"
+          },
+          "publicNetworkAccess": {
+            "value": "Disabled"
+          },
+          "deployApi": {
+            "value": false
+          },
+          "backend1Url": {
+            "value": "[parameters('backend1Url')]"
+          },
+          "backend2Url": {
+            "value": "[parameters('backend2Url')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.41.2.15936",
+              "templateHash": "6860399907950564650"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region."
+              }
+            },
+            "apimName": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM instance name."
+              }
+            },
+            "apimPublisherEmail": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM publisher email."
+              }
+            },
+            "apimPublisherName": {
+              "type": "string",
+              "metadata": {
+                "description": "APIM publisher name."
+              }
+            },
+            "publicNetworkAccess": {
+              "type": "string",
+              "allowedValues": [
+                "Enabled",
+                "Disabled"
+              ],
+              "metadata": {
+                "description": "Public network access mode for APIM."
+              }
+            },
+            "deployApi": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "When true, deploy API/operations/policies. When false, update APIM only."
+              }
+            },
+            "backend1Url": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI endpoint URL in Korea Central."
+              }
+            },
+            "backend2Url": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure OpenAI endpoint URL in Japan East."
+              }
+            }
+          },
+          "variables": {
+            "apiName": "chat-api",
+            "policyTemplateStart": "<policies><inbound><base /><set-backend-service base-url=\"",
+            "policyTemplateMiddle": "\" /><authentication-managed-identity resource=\"https://cognitiveservices.azure.com/\" /><set-method>POST</set-method></inbound><backend><base /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>",
+            "backend1FullUrl": "[format('{0}/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-10-21', parameters('backend1Url'))]",
+            "backend2FullUrl": "[format('{0}/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-10-21', parameters('backend2Url'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.ApiManagement/service",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[parameters('apimName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "StandardV2",
+                "capacity": 1
+              },
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "publisherEmail": "[parameters('apimPublisherEmail')]",
+                "publisherName": "[parameters('apimPublisherName')]",
+                "publicNetworkAccess": "[parameters('publicNetworkAccess')]"
+              }
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "displayName": "Private Validation Chat API",
+                "path": "chat",
+                "protocols": [
+                  "https"
+                ],
+                "subscriptionRequired": false,
+                "serviceUrl": "https://example.invalid"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test1-post', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "displayName": "Proxy to Korea Central gpt-4o-mini",
+                "method": "POST",
+                "urlTemplate": "/test1",
+                "request": {
+                  "queryParameters": [],
+                  "headers": [],
+                  "representations": [
+                    {
+                      "contentType": "application/json"
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200
+                  },
+                  {
+                    "statusCode": 403
+                  },
+                  {
+                    "statusCode": 500
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test2-post', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "displayName": "Proxy to Japan East gpt-4o-mini",
+                "method": "POST",
+                "urlTemplate": "/test2",
+                "request": {
+                  "queryParameters": [],
+                  "headers": [],
+                  "representations": [
+                    {
+                      "contentType": "application/json"
+                    }
+                  ]
+                },
+                "responses": [
+                  {
+                    "statusCode": 200
+                  },
+                  {
+                    "statusCode": 403
+                  },
+                  {
+                    "statusCode": 500
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test1-post/policy', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "format": "rawxml",
+                "value": "[format('{0}{1}{2}', variables('policyTemplateStart'), variables('backend1FullUrl'), variables('policyTemplateMiddle'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployApi')]",
+              "type": "Microsoft.ApiManagement/service/apis/operations/policies",
+              "apiVersion": "2023-09-01-preview",
+              "name": "[format('{0}/{1}/test2-post/policy', parameters('apimName'), variables('apiName'))]",
+              "properties": {
+                "format": "rawxml",
+                "value": "[format('{0}{1}{2}', variables('policyTemplateStart'), variables('backend2FullUrl'), variables('policyTemplateMiddle'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "apimId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.ApiManagement/service', parameters('apimName'))]"
+            },
+            "apimPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.ApiManagement/service', parameters('apimName')), '2023-09-01-preview', 'full').identity.principalId]"
+            },
+            "apimGatewayUrl": {
+              "type": "string",
+              "value": "[format('https://{0}.azure-api.net', parameters('apimName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'apim-private-endpoint')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "vmPublicIp": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'vm'), '2025-04-01').outputs.vmPublicIp.value]"
+    },
+    "apimGatewayHost": {
+      "type": "string",
+      "value": "[format('{0}.azure-api.net', parameters('apimName'))]"
+    },
+    "apimGatewayUrl": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim-enabled'), '2025-04-01').outputs.apimGatewayUrl.value]"
+    },
+    "apimPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'apim-enabled'), '2025-04-01').outputs.apimPrincipalId.value]"
+    }
+  }
+}
